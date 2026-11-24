@@ -11,6 +11,8 @@ from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 
+from mobilis.journal import LigneRejetee
+
 # Export de l'ancien outil Windows.
 ENCODAGE = "cp1252"
 COLONNES = (
@@ -117,6 +119,7 @@ class Anomalie:
 class RapportStations:
     lignes_lues: int = 0
     stations: list[Station] = field(default_factory=list)
+    codes_lus: set[str] = field(default_factory=set)
     anomalies: list[Anomalie] = field(default_factory=list)
 
     @property
@@ -132,13 +135,6 @@ class RapportStations:
 
     def par_statut(self) -> Counter[Statut]:
         return Counter(s.statut for s in self.stations)
-
-
-class LigneRejetee(Exception):
-    def __init__(self, type_: TypeAnomalie, detail: str) -> None:
-        super().__init__(detail)
-        self.type = type_
-        self.detail = detail
 
 
 def lire_lignes(chemin: Path) -> Iterator[tuple[int, list[str]]]:
@@ -242,6 +238,8 @@ def lire_stations(chemin: Path) -> RapportStations:
     for ligne, champs in lire_lignes(chemin):
         rapport.lignes_lues += 1
         code = champs[0].strip() if champs else ""
+        if code:
+            rapport.codes_lus.add(code)
         try:
             station, corrections = lire_station(ligne, champs)
         except LigneRejetee as e:

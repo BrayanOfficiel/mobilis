@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from mobilis.journal import LigneRejetee
 from mobilis.stations import (
     COLONNES,
-    LigneRejetee,
     Station,
     Statut,
     TypeAnomalie,
