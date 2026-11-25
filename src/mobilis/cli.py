@@ -17,6 +17,7 @@ from mobilis.abonnes import ECARTEES_ABONNES, AnomalieAbonne, Formule, lire_abon
 from mobilis.bornes import (
     ClientBornes,
     ClientBornesAsync,
+    ErreurApi,
     Photo,
     comparer,
     photographier_asyncio,
@@ -237,53 +238,82 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.mesure:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
         tracemalloc.start()
-
-    rapport = lire_stations(chemin_stations)
-    if args.commande == "stations":
-        afficher_stations(rapport, args.detail)
-    elif args.commande == "frequentation":
-        chemin_trajets = dossier / FICHIER_TRAJETS
-        if not chemin_trajets.is_file():
-            parser.error(f"fichier introuvable : {chemin_trajets}")
-        journal = Journal()
-        freq = analyser_trajets(chemin_trajets, journal, rapport.codes_lus, args.mois)
-        noms = {s.code: s.nom for s in rapport.stations}
-        afficher_frequentation(freq, journal, noms, args.detail)
-    elif args.commande == "facturation":
-        chemins = [dossier / f for f in (FICHIER_TRAJETS, FICHIER_ABONNES, FICHIER_TARIFS)]
-        for chemin in chemins:
-            if not chemin.is_file():
-                parser.error(f"fichier introuvable : {chemin}")
-        chemin_trajets, chemin_abonnes, chemin_tarifs = chemins
-        journal_abonnes = Journal()
-        abonnes = lire_abonnes(chemin_abonnes, journal_abonnes)
-        tarifs = lire_tarifs(chemin_tarifs)
-        journal = Journal()
-        fact = facturer_fichier(
-            chemin_trajets, tarifs, abonnes, journal, rapport.codes_lus, args.mois
-        )
-        # Même trajets, ancienne grille : l'effet de la hausse à comportement égal.
-        grille = max(g.en_vigueur_du for g in tarifs.grilles)
-        simulee = None
-        if grille.strftime("%Y-%m") in fact.ca.mois():
-            simulee = facturer_fichier(
-                chemin_trajets,
-                tarifs.avant(grille),
-                abonnes,
-                Journal(),
-                rapport.codes_lus,
-                grille.strftime("%Y-%m"),
-            )
-        afficher_facturation(fact, simulee, journal_abonnes, args.detail)
-    elif args.commande == "etat":
-        cle = args.cle or os.environ.get("MOBILIS_API_CLE")
-        if not cle:
-            parser.error("clé de l'API absente : --cle ou variable MOBILIS_API_CLE")
-        strategies = ("sequentiel", "threads", "asyncio") if args.comparer else (args.strategie,)
-        for strategie in strategies:
-            debut = time.perf_counter()
-            photo = photographier(strategie, args.url, cle)
-            duree = time.perf_counter() - debut
-            print(f"{strategie:<11}: {duree:5.1f} s, {len(photo.etats)} stations")
-        afficher_etat(photo, rapport, duree)
+    try:
+        rapport = lire_stations(chemin_stations)
+        if args.commande == "stations":
+            afficher_stations(rapport, args.detail)
+        elif args.commande == "frequentation":
+            commande_frequentation(parser, args, dossier, rapport)
+        elif args.commande == "facturation":
+            commande_facturation(parser, args, dossier, rapport)
+        elif args.commande == "etat":
+            commande_etat(parser, args, rapport)
+    finally:
+        tracemalloc.stop()
     return 0
+
+
+def exiger(parser: argparse.ArgumentParser, *chemins: Path) -> None:
+    for chemin in chemins:
+        if not chemin.is_file():
+            parser.error(f"fichier introuvable : {chemin}")
+
+
+def commande_frequentation(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    dossier: Path,
+    rapport: RapportStations,
+) -> None:
+    chemin_trajets = dossier / FICHIER_TRAJETS
+    exiger(parser, chemin_trajets)
+    journal = Journal()
+    freq = analyser_trajets(chemin_trajets, journal, rapport.codes_lus, args.mois)
+    noms = {s.code: s.nom for s in rapport.stations}
+    afficher_frequentation(freq, journal, noms, args.detail)
+
+
+def commande_facturation(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    dossier: Path,
+    rapport: RapportStations,
+) -> None:
+    chemin_trajets = dossier / FICHIER_TRAJETS
+    chemin_abonnes = dossier / FICHIER_ABONNES
+    chemin_tarifs = dossier / FICHIER_TARIFS
+    exiger(parser, chemin_trajets, chemin_abonnes, chemin_tarifs)
+    journal_abonnes = Journal()
+    abonnes = lire_abonnes(chemin_abonnes, journal_abonnes)
+    tarifs = lire_tarifs(chemin_tarifs)
+    fact = facturer_fichier(
+        chemin_trajets, tarifs, abonnes, Journal(), rapport.codes_lus, args.mois
+    )
+    # Mêmes trajets, ancienne grille : l'effet de la hausse à comportement égal.
+    grille = max(g.en_vigueur_du for g in tarifs.grilles)
+    mois_grille = grille.strftime("%Y-%m")
+    simulee = None
+    if mois_grille in fact.ca.mois():
+        simulee = facturer_fichier(
+            chemin_trajets, tarifs.avant(grille), abonnes, Journal(), rapport.codes_lus, mois_grille
+        )
+    afficher_facturation(fact, simulee, journal_abonnes, args.detail)
+
+
+def commande_etat(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, rapport: RapportStations
+) -> None:
+    cle = args.cle or os.environ.get("MOBILIS_API_CLE")
+    if not cle:
+        parser.error("clé de l'API absente : --cle ou variable MOBILIS_API_CLE")
+    strategies = ("sequentiel", "threads", "asyncio") if args.comparer else (args.strategie,)
+    for strategie in strategies:
+        debut = time.perf_counter()
+        try:
+            photo = photographier(strategie, args.url, cle)
+        except ErreurApi as e:
+            # Les bornes en panne sont déjà gérées ; ici c'est l'API entière (liste des stations).
+            parser.exit(1, f"API des bornes inaccessible ({args.url}) : {e}\n")
+        duree = time.perf_counter() - debut
+        print(f"{strategie:<11}: {duree:5.1f} s, {len(photo.etats)} stations")
+    afficher_etat(photo, rapport, duree)
