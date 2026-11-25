@@ -110,9 +110,33 @@ borne qui ne répond pas est signalée sans arrêter la photo des autres.
 ## Qualité
 
 ```bash
-pytest
-mypy src tests
+pytest                       # 90 tests, ceux qui lisent le kit sont ignorés sans lui
+pytest --cov                 # couverture des lignes et des branches
+mypy src tests               # mode strict
 ruff check . && ruff format --check .
+pytest exercices             # exercices du cours
 ```
 
-Les exercices du cours sont dans `exercices/` (`pytest exercices/module1`).
+Les tests n'ont besoin ni du kit ni du serveur des bornes. `tests/conftest.py`
+fabrique un petit kit aux mêmes formats (cp1252, gzip, lignes abîmées), et
+l'API est simulée par `unittest.mock`. Les exemples E1 à E6 de la
+spécification sont un test paramétré (`tests/test_facturation.py`).
+
+La CI (`.github/workflows/qualite.yml`) lance ruff, mypy et pytest sous
+Python 3.11, 3.12 et 3.13. `pre-commit install` lance le formatage, le lint
+et mypy avant chaque commit.
+
+## Organisation du code
+
+```
+src/mobilis/
+  stations.py      cas 1 : Station (dataclass figée), Statut, rapport d'anomalies
+  trajets.py       cas 2 : Trajet, chaîne de générateurs, Frequentation
+  abonnes.py       cas 3 : périodes d'abonnement, formule active à une date
+  facturation.py   cas 3 : tarifs en Decimal, Tarification (ABC) et ses 2 implémentations
+  bornes.py        cas 4 : @reessayer, clients de l'API, photo du réseau
+  journal.py       compteurs d'anomalies
+  decorateurs.py   @mesure (temps, pic mémoire), @tolerante (écarte et journalise)
+  cli.py           commande mobilis
+docs/journal_anomalies.md   chaque anomalie : nombre, décision, justification
+```
