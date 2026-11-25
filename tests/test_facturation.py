@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -20,65 +19,12 @@ from mobilis.facturation import (
 from mobilis.journal import Journal
 from mobilis.trajets import Trajet, TypeVelo
 
-# Extrait des grilles de la spécification (les données du kit ne sont pas versionnées).
-ANNUEL_2025 = {
-    "minutes_incluses": 30,
-    "tranche_minutes": 30,
-    "prix_tranche": "1.00",
-    "supplement_electrique_tranche": "0.50",
-    "frais_deblocage": "0.00",
-    "plafond_jour": "12.00",
-}
-TARIFS = {
-    "devise": "EUR",
-    "penalite_non_restitution": "150.00",
-    "seuil_non_restitution_heures": 24,
-    "grilles": [
-        {
-            "en_vigueur_du": "2025-01-01",
-            "formules": {
-                "annuel": ANNUEL_2025,
-                "mensuel": {**ANNUEL_2025, "plafond_jour": "15.00"},
-                "occasionnel": {
-                    "minutes_incluses": 0,
-                    "tranche_minutes": 15,
-                    "prix_tranche": "0.60",
-                    "supplement_electrique_tranche": "0.40",
-                    "frais_deblocage": "1.00",
-                    "plafond_jour": None,
-                },
-            },
-        },
-        {
-            "en_vigueur_du": "2026-10-01",
-            "formules": {
-                "annuel": {**ANNUEL_2025, "prix_tranche": "1.20", "plafond_jour": "14.00"},
-                "mensuel": {**ANNUEL_2025, "prix_tranche": "1.20", "plafond_jour": "18.00"},
-                "occasionnel": {
-                    "minutes_incluses": 0,
-                    "tranche_minutes": 15,
-                    "prix_tranche": "0.75",
-                    "supplement_electrique_tranche": "0.50",
-                    "frais_deblocage": "1.20",
-                    "plafond_jour": None,
-                },
-            },
-        },
-    ],
-}
 ABONNES = Abonnes(
     [
         Abonnement("A-ANNUEL", Formule.ANNUEL, date(2025, 1, 1), None),
         Abonnement("A-MENSUEL", Formule.MENSUEL, date(2026, 9, 1), date(2026, 9, 30)),
     ]
 )
-
-
-@pytest.fixture
-def tarifs(tmp_path: Path) -> Tarifs:
-    chemin = tmp_path / "tarifs.json"
-    chemin.write_text(json.dumps(TARIFS), encoding="utf-8")
-    return lire_tarifs(chemin)
 
 
 def trajet(
@@ -216,7 +162,8 @@ def test_plafond_par_jour_local_et_par_abonne(tarifs: Tarifs) -> None:
 
 
 def test_abonnement_sans_plafond_refuse() -> None:
-    bareme = Bareme.depuis_json({**ANNUEL_2025, "plafond_jour": None})
+    trente = timedelta(minutes=30)
+    bareme = Bareme(trente, trente, Decimal("1.00"), Decimal("0.50"), Decimal("0.00"), None)
     with pytest.raises(ValueError):
         TarifAbonnement(bareme)
 
