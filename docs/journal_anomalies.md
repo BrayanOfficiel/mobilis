@@ -108,3 +108,38 @@ Décisions prises là où la spécification ne dit rien :
 Limite : le cumul du plafond garde une entrée par abonné et par jour. La
 mémoire ne grandit pas avec le nombre de trajets, mais avec le nombre
 d'abonnés actifs et de jours.
+
+## API des bornes (cas 4)
+
+Reproduire : lancer `kit/outils/serveur_bornes.py`, puis
+`MOBILIS_API_CLE=demo-mobilis-2026 mobilis etat` (ou `--comparer` pour
+mesurer les trois stratégies). Les états changent à chaque appel, la liste
+des stations et les écarts ne changent pas.
+
+| Constat | Nombre | Décision | Justification |
+|---|---:|---|---|
+| Réponse 503 (service indisponible) | 79 sur 2 182 réponses pendant les mesures | réessayé | Erreur passagère : jusqu'à 4 essais, attente de 0,2 s puis doublée. |
+| Réponse 504 (borne injoignable) : MB-0079, MB-0100, MB-0150 | 3 stations | réessayé puis signalé | Ces bornes ne répondent jamais : après 4 essais la station est notée injoignable, la photo des autres continue. |
+| Réponse 429 (trop de requêtes) | 0 | réessayé après `Retry-After` | Le client ne laisse jamais plus de 8 requêtes en vol (sémaphore), donc le cas ne se produit pas ; le réessai reste là si l'API change sa limite. |
+| Stations du référentiel absentes de l'API : MB-0013, MB-0047, MB-0105 | 3 | signalé | Pas d'état temps réel pour elles. |
+| Stations de l'API absentes de `stations.csv` : MB-0151, MB-0152 | 2 | signalé | Probablement des stations récentes que le référentiel n'a pas encore. |
+| Stations de l'API écartées du référentiel : MB-0028, MB-0090, MB-0109 | 3 | signalé | Elles existent bien (déjà vu dans les trajets) ; l'API pourrait compléter leur capacité. |
+| Stations fermées ou hors service dans le référentiel qui répondent : MB-0019, MB-0113, MB-0143 | 3 | signalé | Le statut du référentiel est peut-être en retard. |
+| Capacité différente (vélos + places libres dans l'API contre `capacite` du référentiel) | 137 sur 146 | signalé, non corrigé | Les deux sources se contredisent presque partout. On ne sait pas laquelle est juste (bornes en panne, extension de station) : vide et pleine sont jugées sur l'API, qui est l'état réel. |
+
+Mesure des trois stratégies (Apple M1 Pro, Python 3.12, simulateur sans
+`--calme`, trois passages de `mobilis etat --comparer`) :
+
+| Stratégie | Passage 1 | Passage 2 | Passage 3 |
+|---|---:|---:|---:|
+| séquentielle | 63,7 s | 77,9 s | 69,2 s |
+| threads (8) | 12,4 s | 10,4 s | 9,4 s |
+| asyncio (8 en vol) | 9,4 s | 10,8 s | 12,8 s |
+
+Choix : les threads. Le travail est de l'attente réseau, donc threads ou
+asyncio. Les deux vont aussi vite parce que c'est la limite de 8 requêtes
+du serveur qui fixe le débit, pas le client. Les threads utilisent
+`urllib` (bibliothèque standard), alors qu'asyncio demande un client HTTP
+écrit à la main sur `open_connection` : plus de code à maintenir pour aucun
+gain mesuré. asyncio deviendrait intéressant avec des milliers de requêtes
+simultanées, ce que l'API interdit.

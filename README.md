@@ -4,8 +4,8 @@ Bibliothèque Python commune pour les données du réseau de vélos Mobilis
 (projet du cours PYA-701, Python avancé) : référentiel des stations, trajets,
 facturation et état des bornes.
 
-État : cas 1 (référentiel des stations), cas 2 (trajets) et cas 3 (facturation)
-traités.
+État : les cinq cas sont traités (stations, trajets, facturation, état en temps
+réel, commande `mobilis`).
 
 ## Installation
 
@@ -35,7 +35,14 @@ mobilis frequentation --mois 2026-10  # un seul mois
 mobilis --mesure frequentation        # + durée et pic mémoire
 mobilis facturation                   # chiffre d'affaires par mois et formule
 mobilis facturation --detail          # + abonnés introuvables à signaler
+mobilis etat                          # état des stations via l'API des bornes
+mobilis etat --comparer               # séquentiel, threads et asyncio mesurés
 ```
+
+`mobilis etat` interroge l'API des bornes (simulateur du kit :
+`python kit/outils/serveur_bornes.py`). La clé n'est pas dans le dépôt : elle
+se donne par `--cle` ou par la variable `MOBILIS_API_CLE`, l'adresse par
+`--url` ou `MOBILIS_API_URL` (défaut `http://127.0.0.1:8765`).
 
 ```python
 from pathlib import Path
@@ -94,6 +101,11 @@ Détail et chiffres dans [docs/journal_anomalies.md](docs/journal_anomalies.md).
 La tarification est une classe abstraite `Tarification` (calcul du prix
 commun) avec deux implémentations : `TarifOccasionnel` (sans plafond) et
 `TarifAbonnement` (plafond journalier par abonné).
+
+Pour l'API des bornes, le décorateur `@reessayer` (et `@reessayer_async`)
+refait un appel en 429, 503, 504 ou erreur réseau, en respectant
+`Retry-After`. Le client ne laisse jamais plus de 8 requêtes en vol. Une
+borne qui ne répond pas est signalée sans arrêter la photo des autres.
 
 ## Qualité
 
