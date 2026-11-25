@@ -502,7 +502,7 @@ photo. Le désaccord avec le référentiel, lui, est stable :
   nous le signalons sans corriger, et "vide" et "pleine" sont jugées sur
   l'API, qui donne l'état réel.
 
-Durée de la photo : 9 à 12 s avec les threads (partie 3.4).
+Durée de la photo : 9 à 13 s avec les threads (partie 3.4), sous les 15 s demandées.
 
 ## 5.5 Journal des anomalies
 
