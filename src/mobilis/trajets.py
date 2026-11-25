@@ -268,6 +268,23 @@ def stations_qui_se_vident(freq: Frequentation, n: int = 10) -> list[tuple[str, 
     return sorted(candidates, key=lambda c: c[1])[:n]
 
 
+def trajets_propres(
+    chemin: Path,
+    journal: Journal,
+    codes_connus: Collection[str] | None = None,
+    mois: str | None = None,
+) -> Iterator[Trajet]:
+    """Chaîne commune aux cas 2 et 3 : lecture, conversion, R11, R10, R12, filtre du mois."""
+    trajets = coherents(
+        dedoublonner(convertir_trajets(lire_lignes(chemin), journal), journal), journal
+    )
+    if codes_connus is not None:
+        trajets = signaler_inconnues(trajets, codes_connus, journal)
+    if mois is not None:
+        trajets = du_mois(trajets, mois)
+    return trajets
+
+
 @mesure("analyse des trajets")
 def analyser_trajets(
     chemin: Path,
@@ -276,14 +293,7 @@ def analyser_trajets(
     mois: str | None = None,
 ) -> Frequentation:
     """Lit le fichier des trajets d'un bout à l'autre et agrège la fréquentation."""
-    trajets = coherents(
-        dedoublonner(convertir_trajets(lire_lignes(chemin), journal), journal), journal
-    )
-    if codes_connus is not None:
-        trajets = signaler_inconnues(trajets, codes_connus, journal)
-    if mois is not None:
-        trajets = du_mois(trajets, mois)
     freq = Frequentation()
-    for trajet in trajets:
+    for trajet in trajets_propres(chemin, journal, codes_connus, mois):
         freq.ajouter(trajet)
     return freq
