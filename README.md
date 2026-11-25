@@ -4,7 +4,8 @@ Bibliothèque Python commune pour les données du réseau de vélos Mobilis
 (projet du cours PYA-701, Python avancé) : référentiel des stations, trajets,
 facturation et état des bornes.
 
-État : cas 1 (référentiel des stations) et cas 2 (trajets) traités.
+État : cas 1 (référentiel des stations), cas 2 (trajets) et cas 3 (facturation)
+traités.
 
 ## Installation
 
@@ -32,6 +33,8 @@ mobilis stations --detail             # une ligne par anomalie
 mobilis frequentation                 # profil horaire, stations qui se vident
 mobilis frequentation --mois 2026-10  # un seul mois
 mobilis --mesure frequentation        # + durée et pic mémoire
+mobilis facturation                   # chiffre d'affaires par mois et formule
+mobilis facturation --detail          # + abonnés introuvables à signaler
 ```
 
 ```python
@@ -52,6 +55,19 @@ freq.profil_horaire(TypeJour.SEMAINE)  # [(heure, départs/jour, arrivées/jour)
 journal.compteurs  # anomalies rencontrées
 ```
 
+```python
+from mobilis.abonnes import lire_abonnes
+from mobilis.facturation import facturer_fichier, lire_tarifs
+
+donnees = Path("kit/donnees")
+abonnes = lire_abonnes(donnees / "abonnes.jsonl", Journal())
+tarifs = lire_tarifs(donnees / "tarifs.json")
+facturation = facturer_fichier(
+    donnees / "trajets_2026-08_2026-10.csv.gz", tarifs, abonnes, Journal(), rapport.codes_lus
+)
+facturation.ca.total("2026-10")  # Decimal('93879.80')
+```
+
 Le fichier des trajets est lu par une chaîne de générateurs (lecture,
 conversion, dédoublonnage, filtres) puis agrégé : il n'est jamais chargé en
 mémoire.
@@ -69,6 +85,15 @@ Détail et chiffres dans [docs/journal_anomalies.md](docs/journal_anomalies.md).
 - Fin avant le début : trajet écarté.
 - Trajet sans arrivée : le départ compte, pas d'arrivée.
 - Station absente de `stations.csv` : trajet gardé et signalé.
+- Ligne d'abonné coupée : gardée si identifiant, formule et dates sont
+  entiers, sinon écartée (ses trajets passent au tarif occasionnel).
+- Trajet à cheval sur deux jours : il compte pour le jour local de son début.
+- Montants en `Decimal` de bout en bout, arrondis au centime (moitié vers le
+  haut).
+
+La tarification est une classe abstraite `Tarification` (calcul du prix
+commun) avec deux implémentations : `TarifOccasionnel` (sans plafond) et
+`TarifAbonnement` (plafond journalier par abonné).
 
 ## Qualité
 

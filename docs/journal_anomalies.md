@@ -67,3 +67,44 @@ fait pas monter le pic de plus de 10 %.
 
 Limites : les jours fériés (15 août) sont comptés comme des jours ordinaires ;
 un doublon séparé de plus de 1 000 lignes de l'original ne serait pas vu.
+
+## abonnes.jsonl
+
+Reproduire : `mobilis facturation --detail`. UTF-8, une période d'abonnement
+par ligne, 5 263 lignes.
+
+| Anomalie | Lignes | Décision | Justification |
+|---|---:|---|---|
+| Formule écrite avec majuscules ou espace (`Annuel`, ` mensuel`, `SOLIDAIRE`...) | 147 | corrigé | Trois formules sans ambiguïté une fois en minuscules et sans espaces. |
+| Ligne vide | 3 | écartée | Rien à lire. |
+| Ligne coupée pendant l'export, mais `id`, `formule`, `debut` et `fin` entiers (A004081, A000857) | 2 | corrigé | Seule la commune est perdue, elle ne sert pas à facturer. On ne garde que les paires `"clé": valeur` complètes : une valeur coupée n'est jamais devinée. |
+| Ligne coupée avant la fin des champs utiles (A004779, A001620, et deux dont l'identifiant même est coupé) | 4 | écartée | Formule ou dates perdues. Les trajets de ces abonnés passent au tarif occasionnel et sont signalés (R3). |
+
+Résultat : 5 256 périodes pour 5 196 abonnés. Aucune période ne chevauche
+une autre pour un même abonné ; si cela arrivait, la plus récente serait
+prise.
+
+## Facturation (trajets d'août à octobre)
+
+Les trajets sont nettoyés par la même chaîne que le cas 2 (doublons R11,
+fins avant début R10, stations inconnues R12) : 154 868 trajets facturés.
+
+| Situation | Trajets | Décision | Justification |
+|---|---:|---|---|
+| `abonne_id` absent de `abonnes.jsonl` (118 identifiants) | 197 | tarif occasionnel, signalé | R3. Une partie vient des 4 lignes d'abonnés écartées (A004779 : 27 trajets, A001620 : 13). |
+| Abonnement expiré ou pas encore commencé à la date locale du trajet | 701 | tarif occasionnel | R3. Pas une erreur de données, compté pour information. |
+| Trajet fantôme (moins de 2 min, retour à la station de départ) | 1 944 | 0 €, signalé | R8, pour la maintenance. |
+| Non restitué : pas d'arrivée (78) ou plus de 24 h | 114 | pénalité de 150 € | R9, hors plafond. 17 100 € au total, montré à part. |
+
+Décisions prises là où la spécification ne dit rien :
+
+- un trajet commencé un jour et fini le lendemain compte pour le jour (et le
+  mois) local de son début, comme la grille (R1) ;
+- le plafond journalier (R6) est réparti dans l'ordre du fichier : le total
+  du jour ne dépend pas de l'ordre, seule la ventilation entre trajets en
+  dépend ;
+- la pénalité R9 est rangée sous la formule de l'abonné, comme un trajet.
+
+Limite : le cumul du plafond garde une entrée par abonné et par jour. La
+mémoire ne grandit pas avec le nombre de trajets, mais avec le nombre
+d'abonnés actifs et de jours.
