@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import os
+import time
 import tracemalloc
 from collections.abc import Sequence
 from decimal import Decimal
@@ -12,6 +14,15 @@ from enum import Enum
 from pathlib import Path
 
 from mobilis.abonnes import ECARTEES_ABONNES, AnomalieAbonne, Formule, lire_abonnes
+from mobilis.bornes import (
+    ClientBornes,
+    ClientBornesAsync,
+    Photo,
+    comparer,
+    photographier_asyncio,
+    photographier_sequentiel,
+    photographier_threads,
+)
 from mobilis.facturation import AnomalieFacturation, Facturation, facturer_fichier, lire_tarifs
 from mobilis.journal import Journal
 from mobilis.stations import CORRIGEABLES, RapportStations, lire_stations
@@ -24,6 +35,7 @@ from mobilis.trajets import (
 )
 
 DONNEES_PAR_DEFAUT = Path("kit/donnees")
+URL_API_PAR_DEFAUT = "http://127.0.0.1:8765"
 FICHIER_TRAJETS = "trajets_2026-08_2026-10.csv.gz"
 FICHIER_ABONNES = "abonnes.jsonl"
 FICHIER_TARIFS = "tarifs.json"
@@ -160,6 +172,37 @@ def afficher_facturation(
         print("  " + " ".join(sorted(facturation.introuvables)))
 
 
+def photographier(strategie: str, url: str, cle: str) -> Photo:
+    if strategie == "sequentiel":
+        return photographier_sequentiel(ClientBornes(url, cle))
+    if strategie == "threads":
+        return photographier_threads(ClientBornes(url, cle))
+    return asyncio.run(photographier_asyncio(ClientBornesAsync(url, cle)))
+
+
+def afficher_etat(photo: Photo, rapport: RapportStations, duree: float) -> None:
+    print(f"Photo prise en {duree:.1f} s")
+    print(f"Stations listées par l'API : {len(photo.codes)}, ont répondu : {len(photo.etats)}")
+    for code, erreur in sorted(photo.injoignables.items()):
+        print(f"  injoignable : {code} ({erreur})")
+    print(f"\nStations vides ({len(photo.vides)}) :")
+    for e in photo.vides:
+        print(f"  {e.code}  {e.places_libres} places libres")
+    print(f"Stations pleines ({len(photo.pleines)}) :")
+    for e in photo.pleines:
+        print(f"  {e.code}  {e.velos} vélos")
+    ecarts = comparer(photo, rapport)
+    print("\nComparaison avec le référentiel :")
+    for libelle, codes in (
+        ("retenues mais absentes de l'API", ecarts.absentes_api),
+        ("dans l'API, absentes de stations.csv", ecarts.inconnues_referentiel),
+        ("dans l'API, écartées du référentiel", ecarts.ecartees_referentiel),
+        ("fermées ou hors service qui répondent", ecarts.non_exploitables_actives),
+    ):
+        print(f"  {libelle:<38}: {' '.join(codes) or '-'}")
+    print(f"  {'capacité différente (vélos + places)':<38}: {len(ecarts.capacites)} stations")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mobilis", description=__doc__)
     parser.add_argument("--donnees", help="dossier des données du kit (sinon MOBILIS_DONNEES)")
@@ -175,6 +218,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     facturation = sous.add_parser("facturation", help="chiffre d'affaires par mois et formule")
     facturation.add_argument("--mois", help="ne garder qu'un mois, AAAA-MM")
     facturation.add_argument("--detail", action="store_true", help="exemples par anomalie")
+
+    etat = sous.add_parser("etat", help="état des stations en temps réel (API des bornes)")
+    etat.add_argument("--url", default=os.environ.get("MOBILIS_API_URL", URL_API_PAR_DEFAUT))
+    etat.add_argument("--cle", help="clé de l'API (sinon MOBILIS_API_CLE)")
+    etat.add_argument(
+        "--strategie", choices=("sequentiel", "threads", "asyncio"), default="threads"
+    )
+    etat.add_argument(
+        "--comparer", action="store_true", help="mesure les trois stratégies l'une après l'autre"
+    )
 
     args = parser.parse_args(argv)
     dossier = dossier_donnees(args.donnees)
@@ -222,4 +275,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 grille.strftime("%Y-%m"),
             )
         afficher_facturation(fact, simulee, journal_abonnes, args.detail)
+    elif args.commande == "etat":
+        cle = args.cle or os.environ.get("MOBILIS_API_CLE")
+        if not cle:
+            parser.error("clé de l'API absente : --cle ou variable MOBILIS_API_CLE")
+        strategies = ("sequentiel", "threads", "asyncio") if args.comparer else (args.strategie,)
+        for strategie in strategies:
+            debut = time.perf_counter()
+            photo = photographier(strategie, args.url, cle)
+            duree = time.perf_counter() - debut
+            print(f"{strategie:<11}: {duree:5.1f} s, {len(photo.etats)} stations")
+        afficher_etat(photo, rapport, duree)
     return 0
