@@ -11,6 +11,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5", "mypy>=1.10", "ruff>=0.5"]
+# seulement pour produire les PDF de docs/ (python docs/pdf.py ...)
+doc = ["markdown>=3.5", "xhtml2pdf>=0.2.11"]
 
 [project.scripts]
 mobilis = "mobilis.cli:main"
