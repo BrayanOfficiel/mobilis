@@ -7,7 +7,7 @@ subtitle: "Dossier technique, PYA-701 Python avancé"
 
 Dossier technique, cours PYA-701 (Python avancé), M1.
 
-Équipe : [Prénom NOM 1] et [Prénom NOM 2].
+Équipe : Haider BOUDJEMELINE et Ziad MEZZINE.
 
 Dépôt : archive Git jointe au rendu (historique complet, `git log`).
 
@@ -71,8 +71,8 @@ décision.
 
 | Membre | Cas pris en charge | Autres rôles |
 |---|---|---|
-| [Prénom NOM 1] | cas 1 (stations), cas 2 (trajets), cas 5 (commande, tests, CI) | référent qualité : mypy, ruff, revue des tests |
-| [Prénom NOM 2] | cas 3 (abonnés, facturation), cas 4 (API des bornes) | journal des anomalies, mesures de performance |
+| Haider BOUDJEMELINE | cas 1 (stations), cas 2 (trajets), cas 5 (commande, tests, CI) | référent qualité : mypy, ruff, revue des tests |
+| Ziad MEZZINE | cas 3 (abonnés, facturation), cas 4 (API des bornes) | journal des anomalies, mesures de performance |
 
 Le dépôt, la structure du paquet, le `Journal` et les décorateurs communs
 ont été conçus à deux en début de projet, puisque tous les cas s'en
@@ -612,7 +612,7 @@ un test :
 
 ## 6.4 Bilan individuel
 
-### [Prénom NOM 1]
+### Haider BOUDJEMELINE
 
 J'ai pris en charge le référentiel des stations, le pipeline des trajets et
 la livraison (commande `mobilis`, tests, CI).
@@ -640,7 +640,7 @@ Si c'était à refaire, j'écrirais le mini kit de test (`conftest.py`) dès le
 premier jour. Je l'ai fait au cas 5, et plusieurs tests des premiers cas
 auraient été plus simples avec.
 
-### [Prénom NOM 2]
+### Ziad MEZZINE
 
 J'ai pris en charge les abonnés, la facturation et le client de l'API des
 bornes.
