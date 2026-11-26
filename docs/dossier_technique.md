@@ -11,7 +11,7 @@ Dossier technique, cours PYA-701 (Python avancé), M1.
 
 Dépôt : archive Git jointe au rendu (historique complet, `git log`).
 
-Version du code décrite : étiquette Git `v1.0`, novembre 2026.
+Version du code décrite : étiquette Git `v1.1`, novembre 2026.
 
 ## Sommaire
 
