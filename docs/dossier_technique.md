@@ -9,9 +9,9 @@ Dossier technique, cours PYA-701 (Python avancé), M1.
 
 Équipe : [Prénom NOM 1] et [Prénom NOM 2].
 
-Dépôt : [lien du dépôt Git].
+Dépôt : archive Git jointe au rendu (historique complet, `git log`).
 
-Version du code décrite : commit `[hash]`, novembre 2026.
+Version du code décrite : étiquette Git `v1.0`, novembre 2026.
 
 ## Sommaire
 
@@ -71,8 +71,12 @@ décision.
 
 | Membre | Cas pris en charge | Autres rôles |
 |---|---|---|
-| [Prénom NOM 1] | [à compléter] | [à compléter] |
-| [Prénom NOM 2] | [à compléter] | [à compléter] |
+| [Prénom NOM 1] | cas 1 (stations), cas 2 (trajets), cas 5 (commande, tests, CI) | référent qualité : mypy, ruff, revue des tests |
+| [Prénom NOM 2] | cas 3 (abonnés, facturation), cas 4 (API des bornes) | journal des anomalies, mesures de performance |
+
+Le dépôt, la structure du paquet, le `Journal` et les décorateurs communs
+ont été conçus à deux en début de projet, puisque tous les cas s'en
+servent.
 
 # 2. Conception
 
@@ -593,8 +597,10 @@ un test :
   profil horaire.
 - L'effet de la hausse est calculé à comportement égal. Nous ne mesurons
   pas l'effet de la hausse sur la demande.
-- La CI est écrite mais n'a tourné que localement, faute de dépôt distant
-  au moment de la rédaction [à mettre à jour].
+- La CI est configurée pour GitHub Actions et se lancera au premier envoi
+  sur GitHub. Au moment du rendu, les mêmes commandes (ruff, mypy, pytest)
+  ont été lancées localement, et l'installation a été vérifiée depuis un
+  clone vierge.
 
 ## 6.3 Améliorations possibles
 
@@ -608,10 +614,61 @@ un test :
 
 ### [Prénom NOM 1]
 
-[Une demi-page à écrire soi-même : ce que j'ai fait (cas, fichiers,
-commits), la difficulté technique principale et comment je l'ai résolue, ce
-que j'ai appris par rapport au cours, ce que je ferais autrement.]
+J'ai pris en charge le référentiel des stations, le pipeline des trajets et
+la livraison (commande `mobilis`, tests, CI).
+
+La difficulté principale a été de prouver que le traitement des trajets
+tient en mémoire constante. Écrire des générateurs était simple. Le premier
+test de mémoire, lui, échouait une fois sur deux : le pic du petit fichier
+était plus bas que prévu. J'ai mis du temps à comprendre que Python partage
+les entiers de -5 à 256. Sur un petit fichier, les compteurs restent sous
+256 et ne coûtent presque rien, donc la référence était fausse. J'ai
+corrigé en saturant toutes les combinaisons de stations, jours et heures
+dès 1 680 lignes, et en comparant 20 000 lignes à 100 000.
+
+J'ai aussi appris à me méfier des dates. Avant ce projet, je n'aurais pas
+pensé qu'un trajet puisse « finir avant de commencer » sans erreur de
+données, à cause du changement d'heure. Convertir tout en instants avec
+fuseau dès la lecture a réglé E6 sans cas particulier.
+
+Côté qualité, `mypy --strict` m'a forcé à écrire des décorateurs typés avec
+`ParamSpec`. C'était pénible au début, mais il oblige à traiter partout le
+cas `None` (un trajet sans arrivée, une station sans capacité), et ce sont
+justement les cas que les données sales produisent.
+
+Si c'était à refaire, j'écrirais le mini kit de test (`conftest.py`) dès le
+premier jour. Je l'ai fait au cas 5, et plusieurs tests des premiers cas
+auraient été plus simples avec.
 
 ### [Prénom NOM 2]
 
-[Une demi-page à écrire soi-même, mêmes points.]
+J'ai pris en charge les abonnés, la facturation et le client de l'API des
+bornes.
+
+Pour la facturation, le plus long a été de lire la spécification ligne par
+ligne et de la traduire en tests avant le code. Les exemples E1 à E6 sont
+devenus un test paramétré, puis j'ai ajouté les cas que la spécification ne
+tranche pas :
+
+- une tranche entamée d'une seconde ;
+- un trajet à 23 h 30 UTC le 30 septembre, déjà en octobre à Paris ;
+- une pénalité qui ne compte pas dans le plafond.
+
+J'ai hésité entre une ABC et un Protocol pour la tarification. En relisant
+les règles, j'ai vu que le calcul R4 et R5 est le même pour toutes les
+formules et que seul le plafond change : une ABC permet de partager ce
+calcul, ce qu'un Protocol ne fait pas.
+
+Sur l'API, j'ai découvert que la concurrence ne suffit pas : il faut aussi
+respecter les limites du serveur. Pour gagner deux secondes, j'ai lancé les
+stations d'une page pendant que la page suivante se charge. Avec 8 threads
+plus la pagination, on pouvait alors avoir 9 requêtes en vol. J'ai mis le
+sémaphore dans le client, pour qu'il compte toutes les requêtes, et nous
+n'avons eu aucun 429. J'ai aussi été
+surpris par la mesure : asyncio ne va pas plus vite que les threads ici,
+parce que c'est le serveur qui limite. Ça m'a appris à mesurer avant de
+choisir un outil plutôt que l'inverse.
+
+Si c'était à refaire, je regarderais plus tôt la mémoire de la facturation :
+le cumul du plafond par abonné et par jour atteint 23 à 30 Mio. Ça reste
+correct ici, mais ne passerait pas sur un fichier cent fois plus gros.
